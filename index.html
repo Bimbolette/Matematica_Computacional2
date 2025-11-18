@@ -988,64 +988,110 @@
         }
 
         function generateRandomGraph() {
-            const n = 8 + Math.floor(Math.random() * 9);
-            graph.numNodes = n;
-            graph.source = 0;
-            graph.sink = n - 1;
-            graph.nodes = Array.from({length: n}, (_, i) => i);
-            graph.edges = [];
+            const maxAttempts = 100;
+            
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                const n = 8 + Math.floor(Math.random() * 9);
+                graph.numNodes = n;
+                graph.source = 0;
+                graph.sink = n - 1;
+                graph.nodes = Array.from({length: n}, (_, i) => i);
+                graph.edges = [];
 
-            for (let i = 0; i < n - 1; i++) {
-                graph.edges.push({
-                    from: i,
-                    to: i + 1,
-                    capacity: 5 + Math.floor(Math.random() * 11)
-                });
-            }
-
-            const fromSource = Math.min(3, n - 2);
-            for (let i = 0; i < fromSource; i++) {
-                const node = 1 + Math.floor(Math.random() * (n - 2));
-                if (!graph.edges.find(e => e.from === 0 && e.to === node)) {
+                for (let i = 0; i < n - 1; i++) {
                     graph.edges.push({
-                        from: 0,
-                        to: node,
+                        from: i,
+                        to: i + 1,
                         capacity: 5 + Math.floor(Math.random() * 11)
                     });
                 }
-            }
 
-            const toSink = Math.min(3, n - 2);
-            for (let i = 0; i < toSink; i++) {
-                const node = 1 + Math.floor(Math.random() * (n - 2));
-                if (!graph.edges.find(e => e.from === node && e.to === n - 1)) {
-                    graph.edges.push({
-                        from: node,
-                        to: n - 1,
-                        capacity: 5 + Math.floor(Math.random() * 11)
-                    });
+                for (let node = 1; node < n - 1; node++) {
+                    const needsSourceConnection = !graph.edges.some(e => 
+                        (e.from === 0 && e.to === node) || 
+                        (graph.edges.some(e2 => e2.to === node && hasPathFrom(0, e2.from, graph.edges)))
+                    );
+                    
+                    if (needsSourceConnection && Math.random() > 0.3) {
+                        graph.edges.push({
+                            from: 0,
+                            to: node,
+                            capacity: 5 + Math.floor(Math.random() * 11)
+                        });
+                    }
+                }
+
+                for (let node = 1; node < n - 1; node++) {
+                    const needsSinkConnection = !graph.edges.some(e => 
+                        (e.from === node && e.to === n - 1) || 
+                        (graph.edges.some(e2 => e2.from === node && hasPathTo(e2.to, n - 1, graph.edges)))
+                    );
+                    
+                    if (needsSinkConnection && Math.random() > 0.3) {
+                        graph.edges.push({
+                            from: node,
+                            to: n - 1,
+                            capacity: 5 + Math.floor(Math.random() * 11)
+                        });
+                    }
+                }
+
+                const extraEdges = Math.floor(n / 2);
+                for (let i = 0; i < extraEdges; i++) {
+                    const from = Math.floor(Math.random() * (n - 1));
+                    const to = from + 1 + Math.floor(Math.random() * (n - from - 1));
+                    
+                    const hasEdge = graph.edges.find(e => e.from === from && e.to === to);
+                    const hasReverse = graph.edges.find(e => e.from === to && e.to === from);
+                    
+                    if (!hasEdge && !hasReverse && !detectCycle(graph.edges, from, to, n)) {
+                        graph.edges.push({
+                            from,
+                            to,
+                            capacity: 3 + Math.floor(Math.random() * 10)
+                        });
+                    }
+                }
+
+                const matrix = Array(n).fill(0).map(() => Array(n).fill(0));
+                graph.edges.forEach(e => matrix[e.from][e.to] = e.capacity);
+                graph.capacity = matrix;
+
+                const validation = validateConnectivity();
+                
+                if (validation.valid) {
+                    alert(`✓ Grafo Aleatorio Generado\n\n• ${n} nodos\n• ${graph.edges.length} canales\n• Origen: Nodo 1\n• Destino: Nodo ${n}\n• Sin ciclos\n• Todas las conexiones válidas\n• Generado en intento ${attempt + 1}`);
+                    showCurrentGraph();
+                    return;
                 }
             }
 
-            const extraEdges = Math.floor(n / 2);
-            for (let i = 0; i < extraEdges; i++) {
-                const from = Math.floor(Math.random() * (n - 1));
-                const to = from + 1 + Math.floor(Math.random() * (n - from - 1));
-                if (!graph.edges.find(e => e.from === from && e.to === to)) {
-                    graph.edges.push({
-                        from,
-                        to,
-                        capacity: 3 + Math.floor(Math.random() * 10)
-                    });
+            alert(`❌ No se pudo generar un grafo válido después de ${maxAttempts} intentos.\nPor favor, intente nuevamente.`);
+            showScreen('menuScreen');
+        }
+
+        function hasPathFrom(source, target, edges) {
+            if (source === target) return true;
+            const visited = new Set();
+            const queue = [source];
+            visited.add(source);
+
+            while (queue.length > 0) {
+                const current = queue.shift();
+                if (current === target) return true;
+
+                for (const edge of edges) {
+                    if (edge.from === current && !visited.has(edge.to)) {
+                        visited.add(edge.to);
+                        queue.push(edge.to);
+                    }
                 }
             }
+            return false;
+        }
 
-            const matrix = Array(n).fill(0).map(() => Array(n).fill(0));
-            graph.edges.forEach(e => matrix[e.from][e.to] = e.capacity);
-            graph.capacity = matrix;
-
-            alert(`✓ Grafo Aleatorio Generado\n\n• ${n} nodos\n• ${graph.edges.length} canales\n• Origen: Nodo 1\n• Destino: Nodo ${n}\n• Sin ciclos`);
-            showCurrentGraph();
+        function hasPathTo(source, target, edges) {
+            return hasPathFrom(source, target, edges);
         }
 
         function showCurrentGraph() {
